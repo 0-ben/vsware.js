@@ -1,0 +1,22 @@
+{
+  "name": "vsware.js",
+  "version": "1.0.0",
+  "description": "",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "scripts": {
+    "test": "tsx test.ts",
+    "build": "tsc --allowSyntheticDefaultImports"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "AFL-3.0",
+  "devDependencies": {
+    "@types/node": "^22.8.1",
+    "@types/tough-cookie": "^4.0.5",
+    "tsx": "^4.19.2"
+  },
+  "dependencies": {
+    "fetch-cookie": "^3.0.1"
+  }
+}

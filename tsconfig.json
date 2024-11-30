@@ -1,0 +1,17 @@
+{
+    "exclude": ["test.ts", "build/"],
+
+    "compilerOptions": {
+        "module": "NodeNext",
+        "outDir": "build/",
+        "target": "es2022",
+        "lib": ["es2022"],
+        "declaration": true,
+        "allowSyntheticDefaultImports": true,
+        "moduleResolution": "NodeNext",
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+    }
+} 
