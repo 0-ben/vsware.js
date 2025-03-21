@@ -152,10 +152,36 @@ export interface SchoolInfoResult {
 
 }
 
+export interface UnexplainedBelltimeAbsence {
+    /**
+     * @description one of IndividualAttendanceCode's `code` value
+     */
+    attendanceCode: string,
+    session: 'AM' | 'PM'
+    /**
+     * @description In the format YYYY-MM-DD
+     */
+    attendanceDate: string,
+    /**
+     * @description one of IndividualAttendanceCode's `type` value
+     */
+    attendanceCodeType: string,
+    /**
+     * @description 24-hour time, example: 17:51
+     */
+    bellTime: string
+}
+
 export interface AttendanceRecordOverviewResult {
     totalSchoolDays: number,
-    lateAbsences: any[], // test data had no absences, ever! (such a good student)
-    unexplainedAbsences: any[], // test data had no absences, ever! (such a good student)
+    /**
+     * @description In the format YYYY-MM-DD
+     */
+    lateAbsences: string[],
+    /**
+     * @description In the format YYYY-MM-DD
+     */
+    unexplainedAbsences: string[],
     /**
      * @description In the format YYYY-MM-DD
      */
@@ -172,8 +198,40 @@ export interface AttendanceRecordOverviewResult {
     todayPartialUnexplainedAbsences: {
         maxStartTime: nullable<any>,
         minEndTime: nullable<any>,
-        todayUnexplainedBellTimeAbsences: any[]
+        todayUnexplainedBellTimeAbsences: UnexplainedBelltimeAbsence[]
     }
+}
+
+export interface AttendanceRecordMissedLesson {
+    /**
+     * @description in the format YYYY-MM-DD HH:MM:SS
+     */
+    date: string,
+    /**
+     * @description one of IndividualAttendanceCode's `code` value
+     */
+    attendanceCode: string,
+    type: string,
+}
+
+export interface AttendanceRecordLesson {
+    subject: {
+      id: string,
+      name: string,
+      code: string,
+      /**
+       * @description Hex code, no #
+       */
+      colour: string
+    },
+    missedLessons: AttendanceRecordMissedLesson[],
+}
+
+/**
+ * @description Key is YYYY-MM-DD
+ */
+export interface MonthlyAttendanceResult {
+    [key: string]: 'PRESENT' | 'ABSENT' | 'NOT_RECORDED'
 }
 
 export interface IndividualAttendanceCode {
@@ -185,6 +243,41 @@ export interface IndividualAttendanceCode {
     availableToParents: boolean,
     availableToTeachers: 'Yes' | 'No', // I hate this. I hate this so much. Why is it a yes/no and not a boolean??
     deleted: boolean,
+}
+
+export interface AbsenceRequest {
+    maxStartTime: nullable<any>,
+    minEndTime: nullable<any>
+    id: number,
+    learnerPersonalId: number,
+    learnerName: string,
+    learnerClass: string,
+    contactName: string,
+    authorId: string,
+    /**
+     * @description in the format YYYY-MM-DD
+     */
+    startDate: string,
+    /**
+     * @description in the format YYYY-MM-DD
+     */
+    endDate: string,
+    startTime: nullable<string>,
+    endTime: nullable<string>,
+    /**
+     * @description one of IndividualAttendanceCode's `id` value
+     */
+    attendanceCode: number,
+    attendanceCodeString: nullable<any>,
+    absenceReason: string,
+    resolutionNote: nullable<string>,
+    attendanceRequestType: 'FUTURE_SINGLE_DAY' | 'PAST_UNEXPLAINED_ABSENCE' | ({} & string)
+    status: 'DENIED' | 'PENDING' | 'APPROVED',
+    /**
+     * @description in the format YYYY-MM-DD HH:MM:SS
+     */
+    createdOn: string,
+
 }
 
 export interface WorkforceTeacher {
@@ -582,9 +675,22 @@ export class VSWare {
         })
         return await resp.json() as AttendanceRecordOverviewResult
     }
+    
+    async getAttendanceRecordDetailed(learnerId: NumberOrString, yearId: NumberOrString): Promise<AttendanceRecordLesson[]> {
+        const resp = await this.fetcher(`${this.controlBaseURL}/control/parental/${learnerId}/attendance/${yearId}/lessons`, {
+            method: 'GET',
+            headers: this.headers,
+        })
+        return await resp.json() as AttendanceRecordLesson[]
+    }
 
-    // TODO: /control/parental/attendance-requests/[year]/[?????]/all
-    // TODO: /control/parental/[learner]/attendance/[year]/lessons
+    async getAttendanceByMonth(learnerId: NumberOrString, yearId: NumberOrString, yearNumber: NumberOrString, monthNumber: NumberOrString): Promise<MonthlyAttendanceResult> {
+        const resp = await this.fetcher(`${this.controlBaseURL}/control/parental/${learnerId}/attendance/lesson/${yearId}/${yearNumber}/${monthNumber}`, {
+            method: 'GET',
+            headers: this.headers,
+        })
+        return await resp.json() as MonthlyAttendanceResult
+    }
 
     async getAttendanceCodes(type?: 'all' | '' | undefined): Promise<IndividualAttendanceCode[]> {
         const resp = await this.fetcher(`${this.controlBaseURL}/control/parental/attendance-codes${type == 'all' ? '/all' : ''}`, {
@@ -592,6 +698,42 @@ export class VSWare {
             headers: this.headers,
         })
         return await resp.json() as IndividualAttendanceCode[]
+    }
+
+    /**
+     * 
+     * @param learnerId 
+     * @param reason
+     * @param start used for date (time unsupported currently)
+     * @param end used for date (time unsupported currently)
+     * @param code one of IndividualAttendanceCode 's `id` values
+     * @returns some number, no idea what it does
+     */
+    async explainAbsence(learnerId: NumberOrString, reason:string, start: Date, end: Date, code: number, type: 'PAST_UNEXPLAINED_ABSENCE' | ({} & string)): Promise<number> {
+        const resp = await this.fetcher(`${this.controlBaseURL}/control/parental/attendance-requests`, {
+            method: 'POST',
+            headers: this.headers,
+            body: JSON.stringify({
+                learnerPersonalId: learnerId,
+                startDate: VSWare._formatDateForTimetable(start),
+                startTime: null,
+                endDate: VSWare._formatDateForTimetable(end),
+                endTime: null,
+                type: type,
+                attendanceCode: code,
+                absenceReason: reason,
+            })
+        })
+        const text = await resp.text()
+        return Number(text)
+    }
+
+    async getAbsenceRequests(learnerId: NumberOrString, userInfoId: NumberOrString): Promise<AbsenceRequest[]> {
+        const resp = await this.fetcher(`${this.controlBaseURL}/control/parental/attendance-requests/${learnerId}/${userInfoId}/all`, {
+            method: 'GET',
+            headers: this.headers,
+        })
+        return await resp.json() as AbsenceRequest[]
     }
 
     static _formatDateForTimetable(date: Date): string {
